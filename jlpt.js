@@ -25,6 +25,18 @@ function _onPasswordChange(v) {
     localStorage.setItem("tool_password", v);
 }
 
+function _onAjaxTimeoutChange(v) {
+    ajaxTimeout = Number(v)
+}
+
+function _onAjaxCriticalTimeoutChange(v) {
+    ajaxTimeout_Critical = Number(v)
+}
+
+function _onPollIntervalChange(v) {
+    pollInterval = Number(v)
+}
+
 var isChangeSeat = localStorage.getItem("tool_isChangeSeat") == "true";
 
 function _onIsChangeSeatChange(v) {
@@ -93,6 +105,9 @@ function _onOcrHelp() {
 const startHour = 14
 const startMinite = 0
 const startSecond = 0
+let ajaxTimeout = 1500
+let ajaxTimeout_Critical = 10000
+let pollInterval = 700
 
 let offsetX, offsetY, initialX, initialY;
 
@@ -102,7 +117,7 @@ function _initGUI() {
     if (!toolWindow) {
         toolWindow = document.createElement("div");
         toolWindow.id = "tool-window";
-        toolWindow.style = "position: absolute; right: 50px; bottom: 50px; width: 700px; height: 600px; background-color: #ccc; z-index: 999";
+        toolWindow.style = "position: absolute; right: 50px; bottom: 50px; width: 700px; height: 650px; background-color: #ccc; z-index: 999";
         toolWindow.innerHTML = `
         <div id="tool-title" style="background-color: aqua; margin: 5px; text-align:center; cursor: move">
             <div>JLPT抢座脚本(可拖动)</div>
@@ -142,6 +157,18 @@ function _initGUI() {
                 <label>目标考场：</label>
                 <a onclick="_onTargetAddrHelp()" style="cursor: pointer">？</a>
                 <textarea id="tool-targetAddr" rows="5" style="resize: none; width: 100%;" onchange="_onTargetAddrChange(document.getElementById('tool-targetAddr').value)"></textarea>
+            </div>
+            <div style="margin: 10px">
+                <label>AJAX 超时(ms)：</label>
+                <input id="tool-ajaxTimeout" value="1500" style="width: 50px" onchange="_onAjaxTimeoutChange(document.getElementById('tool-ajaxTimeout').value)">
+            </div>
+            <div style="margin: 3px">
+                <label>关键 AJAX 超时(ms)：</label>
+                <input id="tool-ajaxCriticalTimeout" value="10000" style="width: 50px" onchange="_onAjaxCriticalTimeoutChange(document.getElementById('tool-ajaxCriticalTimeout').value)">
+            </div>
+            <div style="margin: 3px">
+                <label>轮询间隔(ms)：</label>
+                <input id="tool-pollInterval" value="10000" style="width: 50px" onchange="_onPollIntervalChange(document.getElementById('tool-pollInterval').value)">
             </div>
             <div style="margin: 10px">
                 <button id="tool-start" onclick="start()" style="margin: 10px">开始</label>
@@ -239,7 +266,9 @@ function _clearLog() {
     document.getElementById('tool-log').value = '';
 }
 
-_initGUI();
+window.addEventListener("load", (event) => {
+    _initGUI();
+});
 
 async function _delay(timeountMS) {
     return new Promise((fin) => {
@@ -274,22 +303,26 @@ async function _login(code) {
         formData.append("chkImgCode", code);
         formData.append("btnlogin", "登录");
 
-        new Ajax.Request(getURL("login.do"), {
-            method: "post",
-            parameters: new URLSearchParams(formData).toString(),
-            requestHeaders: {
-                RequestType: "ajax"
+        jQuery.ajax({
+            url: getURL("login.do"),
+            method: "POST", type: "POST",
+            timeout: ajaxTimeout_Critical,
+            headers: {
+                RequestType: "ajax",
+                "X-Prototype-Version": "1.7"
             },
-            onSuccess: function (e) {
+            data: new URLSearchParams(formData).toString(),
+            success: function (g, textStatus, xhr) {
                 if (timer) {
                     clearTimeout(timer);
                     timer = null;
                 } else {
                     return;
                 }
-                var f = e.responseJSON;
+                var f = typeof g === "string" ? jQuery.parseJSON(g) : g;
                 if (f == null) {
-                    e.request.options.onFailure();
+                    _log("登录请求失败");
+                    fin(null);
                     return
                 }
                 clearChkimgCache();
@@ -304,7 +337,7 @@ async function _login(code) {
                 }
                 fin(f);
             },
-            onFailure: function (g) {
+            error: function () {
                 if (timer) {
                     clearTimeout(timer);
                     timer = null;
@@ -327,22 +360,27 @@ async function _getStatus() {
             _log('status.do timed out after ' + timeout + ' ms');
             fin(null);
         }, timeout);
-        new Ajax.Request(getURL("status.do"), {
-            method: "post",
-            parameters: serializeUser(["ksid", "ksIdNo", "ksLoginFlag"]),
-            requestHeaders: {
-                RequestType: "ajax"
+        
+        jQuery.ajax({
+            url: getURL("status.do"),
+            method: "POST", type: "POST",
+            timeout: ajaxTimeout,
+            headers: {
+                RequestType: "ajax",
+                "X-Prototype-Version": "1.7"
             },
-            onSuccess: function (c) {
+            data: serializeUser(["ksid", "ksIdNo", "ksLoginFlag"]),
+            success: function (g) {
                 if (timer) {
                     clearTimeout(timer);
                     timer = null;
                 } else {
                     return;
                 }
-                var d = c.responseJSON;
+                var d = typeof g === "string" ? jQuery.parseJSON(g) : g;
                 if (d == null) {
-                    c.request.options.onFailure();
+                    _log("获取状态失败");
+                    fin(null);
                     return
                 }
                 if (d.retVal == 0) {
@@ -356,7 +394,7 @@ async function _getStatus() {
                 }
                 fin(d);
             },
-            onFailure: function (g) {
+            error: function (g) {
                 if (timer) {
                     clearTimeout(timer);
                     timer = null;
@@ -366,7 +404,7 @@ async function _getStatus() {
                 _log("获取状态失败");
                 fin(null);
             }
-        })
+        });
     });
 }
 
@@ -436,22 +474,27 @@ async function _refreshImg() {
             _log('chkImg.do timed out after ' + timeout + ' ms');
             fin(null);
         }, timeout);
-        new Ajax.Request(getURL("chkImg.do"), {
-            method: "post",
-            parameters: "chkImgFlag=" + a,
-            requestHeaders: {
-                RequestType: "ajax"
+        
+        jQuery.ajax({
+            url: getURL("chkImg.do"),
+            method: "POST", type: "POST",
+            timeout: ajaxTimeout,
+            headers: {
+                RequestType: "ajax",
+                "X-Prototype-Version": "1.7"
             },
-            onSuccess: function (g) {
+            data: "chkImgFlag=" + a,
+            success: function (g) {
                 if (timer) {
                     clearTimeout(timer);
                     timer = null;
                 } else {
                     return;
                 }
-                let h = g.responseJSON;
+                let h = typeof g === "string" ? jQuery.parseJSON(g) : g;
                 if (h == null) {
-                    g.request.options.onFailure();
+                    _log("获取验证码失败");
+                    fin(null);
                     return
                 }
                 _log("chkImg.do", h);
@@ -474,7 +517,7 @@ async function _refreshImg() {
                     document.getElementById("tool-chkImgAns").focus();
                 }
             },
-            onFailure: function (g) {
+            error: function (g) {
                 if (timer) {
                     clearTimeout(timer);
                     timer = null;
@@ -484,7 +527,7 @@ async function _refreshImg() {
                 _log("获取验证码失败");
                 fin(null);
             }
-        })
+        });
     });
 }
 
@@ -498,12 +541,15 @@ async function _chooseAddr(onlyQuery) {
             fin(null);
         }, timeout);
         user.set("bkjb", examLevel);
-        new Ajax.Request("chooseAddr.do?bkjb=" + user.get("bkjb"), {
-            method: "get",
-            requestHeaders: {
-                RequestType: "ajax"
+        jQuery.ajax({
+            url: "chooseAddr.do?bkjb=" + user.get("bkjb"),
+            method: "GET", type: "GET",
+            timeout: ajaxTimeout,
+            headers: {
+                RequestType: "ajax",
+                "X-Prototype-Version": "1.7"
             },
-            onSuccess: function (originalRequest) {
+            success: function (g, _, originalRequest) {
                 if (timer) {
                     clearTimeout(timer);
                     timer = null;
@@ -512,7 +558,8 @@ async function _chooseAddr(onlyQuery) {
                 }
                 let jsonObj = eval(originalRequest.responseText);
                 if (jsonObj == null) {
-                    originalRequest.request.options.onFailure();
+                    _log("查询考点信息失败");
+                    fin(null);
                     return
                 }
                 let kdInfo = $A(jsonObj);
@@ -542,7 +589,7 @@ async function _chooseAddr(onlyQuery) {
                 }
                 fin(canBook);
             },
-            onFailure: function (originalRequest) {
+            error: function (originalRequest) {
                 if (timer) {
                     clearTimeout(timer);
                     timer = null;
@@ -552,7 +599,7 @@ async function _chooseAddr(onlyQuery) {
                 _log("查询考点信息失败");
                 fin(null);
             }
-        })
+        });
     });
 }
 
@@ -572,32 +619,37 @@ async function _bookseat(kd, code) {
         } else {
             url = getURL("book.do");
         }
-        new Ajax.Request(url, {
-            method: "post",
-            requestHeaders: {
-                RequestType: "ajax"
+        
+        jQuery.ajax({
+            url: url,
+            method: "POST", type: "POST",
+            timeout: ajaxTimeout_Critical,
+            headers: {
+                RequestType: "ajax",
+                "X-Prototype-Version": "1.7"
             },
-            parameters: serializeUser(["bkjb", "bkkd", "ksid", "ksIdNo", "chkImgFlag", "ksLoginFlag"]) + "&chkImgCode=" + code,
-            onCreate: function () {
+            data: serializeUser(["bkjb", "bkkd", "ksid", "ksIdNo", "chkImgFlag", "ksLoginFlag"]) + "&chkImgCode=" + code,
+            beforeSend: function () {
                 _log("定座请求发送中...", kd);
             },
-            onSuccess: function (e) {
+            success: function (g) {
                 if (timer) {
                     clearTimeout(timer);
                     timer = null;
                 } else {
                     return;
                 }
-                let h = e.responseJSON;
+                let h = typeof g === "string" ? jQuery.parseJSON(g) : g;
                 if (h == null) {
-                    e.request.options.onFailure();
+                    _log("定座请求失败");
+                    fin(null);
                     return
                 }
                 _log(isChangeSeat ? "changebook.do" : "book.do", h);
                 clearChkimgCache();
                 fin(h);
             },
-            onFailure: function () {
+            error: function () {
                 if (timer) {
                     clearTimeout(timer);
                     timer = null;
@@ -607,7 +659,7 @@ async function _bookseat(kd, code) {
                 _log("定座请求失败");
                 fin(null);
             }
-        })
+        });
     });
 }
 
@@ -619,25 +671,30 @@ async function _queryBook() {
             _log('queryBook.do timed out after ' + timeout + ' ms');
             fin(null);
         }, timeout);
-        new Ajax.Request(getURL("queryBook.do"), {
-            method: "post",
-            requestHeaders: {
-                RequestType: "ajax"
+        
+        jQuery.ajax({
+            url: getURL("queryBook.do"),
+            method: "POST", type: "POST",
+            timeout: ajaxTimeout_Critical,
+            headers: {
+                RequestType: "ajax",
+                "X-Prototype-Version": "1.7"
             },
-            parameters: serializeUser(["ksid", "ksIdNo", "ksLoginFlag"]),
-            onCreate: function () {
+            data: serializeUser(["ksid", "ksIdNo", "ksLoginFlag"]),
+            beforeSend: function () {
                 _log("定座请求结果查询中...");
             },
-            onSuccess: function (l) {
+            success: function (g) {
                 if (timer) {
                     clearTimeout(timer);
                     timer = null;
                 } else {
                     return;
                 }
-                let m = l.responseJSON;
+                let m = typeof g === "string" ? jQuery.parseJSON(g) : g;
                 if (m == null) {
-                    l.request.options.onFailure();
+                    _log("定座请求结果查询中失败");
+                    fin(null);
                     return
                 }
                 _log("queryBook.do", m);
@@ -730,7 +787,7 @@ async function loop() {
                     await _getStatus();
                     statusTime = now;
                 } else {
-                    await _delay(1000);
+                    await _delay(pollInterval);
                 }
                 continue;
             }
