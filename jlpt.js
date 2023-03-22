@@ -137,11 +137,11 @@ function _initGUI() {
             </div>
             <div style="margin: 10px">
                 <label >证件号：</label>
-                <input id="tool-username" style="width: 150px" onchange="_onUsernameChange(document.getElementById('tool-username').value)">                
+                <input id="tool-username" style="width: 150px" onchange="_onUsernameChange(document.getElementById('tool-username').value)">
             </div>
             <div style="margin: 10px">
                 <label >密　码：</label>
-                <input id="tool-password" style="width: 150px" onchange="_onPasswordChange(document.getElementById('tool-password').value)">                
+                <input id="tool-password" style="width: 150px" onchange="_onPasswordChange(document.getElementById('tool-password').value)">
             </div>
             <div style="margin: 10px">
                 <label>改座模式：</label>
@@ -168,7 +168,7 @@ function _initGUI() {
             </div>
             <div style="margin: 3px">
                 <label>轮询间隔(ms)：</label>
-                <input id="tool-pollInterval" value="10000" style="width: 50px" onchange="_onPollIntervalChange(document.getElementById('tool-pollInterval').value)">
+                <input id="tool-pollInterval" value="700" style="width: 50px" onchange="_onPollIntervalChange(document.getElementById('tool-pollInterval').value)">
             </div>
             <div style="margin: 10px">
                 <button id="tool-start" onclick="start()" style="margin: 10px">开始</label>
@@ -198,6 +198,9 @@ function _initGUI() {
         document.getElementById('tool-examLevel').value = examLevel;
         document.getElementById('tool-username').value = _username;
         document.getElementById('tool-password').value = _password;
+        document.getElementById('tool-ajaxTimeout').value = ajaxTimeout;
+        document.getElementById('tool-ajaxCriticalTimeout').value = ajaxTimeout_Critical;
+        document.getElementById('tool-pollInterval').value = pollInterval;
         document.getElementById('tool-changeSeat').checked = isChangeSeat;
         document.getElementById('tool-fastTryAddr').value = fastTryAddr.join(",");
         document.getElementById('tool-targetAddr').value = targetAddr.join(",");
@@ -360,7 +363,7 @@ async function _getStatus() {
             _log('status.do timed out after ' + timeout + ' ms');
             fin(null);
         }, timeout);
-        
+
         jQuery.ajax({
             url: getURL("status.do"),
             method: "POST", type: "POST",
@@ -474,7 +477,7 @@ async function _refreshImg() {
             _log('chkImg.do timed out after ' + timeout + ' ms');
             fin(null);
         }, timeout);
-        
+
         jQuery.ajax({
             url: getURL("chkImg.do"),
             method: "POST", type: "POST",
@@ -507,6 +510,7 @@ async function _refreshImg() {
 
                 chkImgAnsPromise = fin;
 
+                document.getElementById("tool-chkImg").src = h.chkImgFilename;
                 if (ocrOn && ocrUrl && ocrUrl.length > 0) {
                     _log("尝试自动识别验证码...");
                     _tryOCR(h.chkImgFilename);
@@ -619,7 +623,7 @@ async function _bookseat(kd, code) {
         } else {
             url = getURL("book.do");
         }
-        
+
         jQuery.ajax({
             url: url,
             method: "POST", type: "POST",
@@ -671,7 +675,7 @@ async function _queryBook() {
             _log('queryBook.do timed out after ' + timeout + ' ms');
             fin(null);
         }, timeout);
-        
+
         jQuery.ajax({
             url: getURL("queryBook.do"),
             method: "POST", type: "POST",
