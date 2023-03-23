@@ -513,7 +513,6 @@ async function _refreshImg() {
 
                 chkImgAnsPromise = fin;
 
-                document.getElementById("tool-chkImg").src = h.chkImgFilename;
                 if (ocrOn && ocrUrl && ocrUrl.length > 0) {
                     _log("尝试自动识别验证码...");
                     _tryOCR(h.chkImgFilename);
