@@ -305,7 +305,12 @@ function _clearLog() {
     document.getElementById('tool-log').value = '';
 }
 
-_initGUI();
+if (document.readyState !== 'complete')
+    window.addEventListener("load", (event) => {
+        _initGUI();
+    });
+else
+    _initGUI();
 
 async function _delay(timeountMS) {
     return new Promise((fin) => {
